@@ -1,62 +1,39 @@
-const express = require('express')
 const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken')
-const secrets = require('../config/secrets.js');
+const router = require("express").Router();
+const Users = require("../users/users-model.js");
 
-const Users = require('../users/users-model')
+router.post("/register", (req, res) => {
 
-const router = express.Router()
+  const user = req.body;
+  const hash = bcrypt.hashSync(user.password, 8)
+  
+  user.password = hash;
 
-router.post('/register', async(req, res, next) => {
-  try {
-    const { username } = req.body   
-    const user = await Users.findBy({ username }).first()
-   
-    if(user) {
-      return res.status(409).json({
-        message: "Username is already taken"
-      })
-    }
-
-    res.status(201).json(await Users.add(req.body))
-  } catch(err) {
-    next(err)
-  }
-})
-
-router.post('/login', async(req, res, next) => {
-  try {
-    const { username, password } = req.body
-
-    const user = await Users.findBy({ username }).first()
-    if (!user) {
-      return res.status(401).json({
-        message: "You shall not pass"
-      })
-    }
-
-    const passwordValid = await bcrypt.compare(password, user.password)
-    if (!passwordValid) {
-      return res.status(401).json({
-        message: "You shall not pass"
-      })
-    }
-
-    const payload = {
-      userId: user.id,
-      department: "admin",
-    }
-
-    const token = jwt.sign(payload, process.env.JWT_SECRET)
-
-    res.cookie("token", token)
-
-    res.json({
-      message: `Welcome ${user.username}!`
+  Users.add(user)
+    .then(saved => {
+      res.status(201).json(saved)
     })
-  } catch(err) {
-    next(err)
-  }
+    .catch(err => {
+      res.status(500).json(error)
+    });
+});
+
+router.post("/login", (req, res) => {
+  const {username, password} = req.body
+
+  Users.findBy({ username })
+    .first()
+    .then(user => {
+      if (user && bcrypt.compareSync(password, user.password)) {
+        req.session.user = username;  
+        res.status(200).json({ message: `Logged in`, });
+      } else { 
+        res.status(401).json({ message: 'You shall not pass!' });
+      }
+    })
+    .catch(err => {
+      res.status(500).json(err)
+    })
 })
 
-module.exports = router
+module.exports = router;
